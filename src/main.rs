@@ -8,7 +8,7 @@ async fn main() {
     let mut nitter_scraper = NitterScraper::builder()
         .client(&client)
         .instance("http://0.0.0.0:8080")
-        .query("from:hf_dreamcatcher")
+        .query("from:sua_cab")
         .limit(100)
         .build();
     let nitter_search = nitter_scraper.search().await;

@@ -24,6 +24,8 @@ pub fn parse_nitter_html(html: String) -> Result<(Vec<Tweet>, String), NitterErr
         let full_text = parse_tweet_body(&element)?;
         let images = parse_tweet_images(&element)?;
         let created_at = parse_tweet_time(&element)?;
+        let retweet = parse_tweet_retweet(&element);
+        let pinned = parse_tweet_pinned(&element);
 
         tweets.push(Tweet {
             id,
@@ -31,6 +33,8 @@ pub fn parse_nitter_html(html: String) -> Result<(Vec<Tweet>, String), NitterErr
             created_at,
             full_text,
             images,
+            retweet,
+            pinned,
             user: User { screen_name },
         })
     }
@@ -44,17 +48,6 @@ pub fn parse_nitter_html(html: String) -> Result<(Vec<Tweet>, String), NitterErr
 static TWEET_LINK_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("a.tweet-link").unwrap());
 static TWEET_LINK_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"^/(?P<screen_name>\w+)/status/(?P<id>\d+)").unwrap());
-static TWEET_BODY_SELECTOR: Lazy<Selector> =
-    Lazy::new(|| Selector::parse(".tweet-content").unwrap());
-static IMAGES_SELECTOR: Lazy<Selector> =
-    Lazy::new(|| Selector::parse(".attachment.image a.still-image").unwrap());
-static IMAGE_ID_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"^/pic/\w+/media%2F(?P<url>\w+\.\w+)$").unwrap());
-static TWEET_DATE_SELECTOR: Lazy<Selector> =
-    Lazy::new(|| Selector::parse("span.tweet-date a").unwrap());
-static TIME_FORMAT_DESCRIPTION: &[FormatItem<'_>] = format_description!(
-        "[month repr:short] [day padding:none], [year] · [hour repr:12 padding:none]:[minute] [period] UTC"
-    );
 
 fn parse_tweet_screen_name(element: &ElementRef) -> Result<String, NitterError> {
     let tweet_link_element = element.select(&TWEET_LINK_SELECTOR).next().unwrap();
@@ -73,6 +66,9 @@ fn parse_tweet_id_str(element: &ElementRef) -> Result<String, NitterError> {
 }
 
 fn parse_tweet_body(element: &ElementRef) -> Result<String, NitterError> {
+    static TWEET_BODY_SELECTOR: Lazy<Selector> =
+        Lazy::new(|| Selector::parse(".tweet-content").unwrap());
+
     let full_text: String = element
         .select(&TWEET_BODY_SELECTOR)
         .next()
@@ -84,6 +80,11 @@ fn parse_tweet_body(element: &ElementRef) -> Result<String, NitterError> {
 }
 
 fn parse_tweet_images(element: &ElementRef) -> Result<Vec<String>, NitterError> {
+    static IMAGES_SELECTOR: Lazy<Selector> =
+        Lazy::new(|| Selector::parse(".attachment.image a.still-image").unwrap());
+    static IMAGE_ID_RE: Lazy<Regex> =
+        Lazy::new(|| Regex::new(r"^/pic/\w+/media%2F(?P<url>\w+\.\w+)$").unwrap());
+
     let images: Vec<_> = element
         .select(&IMAGES_SELECTOR)
         .into_iter()
@@ -102,6 +103,12 @@ fn parse_tweet_images(element: &ElementRef) -> Result<Vec<String>, NitterError> 
 }
 
 fn parse_tweet_time(element: &ElementRef) -> Result<String, NitterError> {
+    static TWEET_DATE_SELECTOR: Lazy<Selector> =
+        Lazy::new(|| Selector::parse("span.tweet-date a").unwrap());
+    static TIME_FORMAT_DESCRIPTION: &[FormatItem<'_>] = format_description!(
+        "[month repr:short] [day padding:none], [year] · [hour repr:12 padding:none]:[minute] [period] UTC"
+    );
+
     let created_at = {
         let tweet_date_element = element.select(&TWEET_DATE_SELECTOR).next().unwrap();
         let time_str = tweet_date_element.value().attr("title").unwrap();
@@ -112,8 +119,23 @@ fn parse_tweet_time(element: &ElementRef) -> Result<String, NitterError> {
     Ok(created_at)
 }
 
+fn parse_tweet_retweet(element: &ElementRef) -> bool {
+    static RETWEET_SELECTOR: Lazy<Selector> =
+        Lazy::new(|| Selector::parse(".retweet-header").unwrap());
+
+    element.select(&RETWEET_SELECTOR).next().is_some()
+}
+
+fn parse_tweet_pinned(element: &ElementRef) -> bool {
+    static PINNED_SELECTOR: Lazy<Selector> =
+        Lazy::new(|| Selector::parse(".pinned").unwrap());
+
+    element.select(&PINNED_SELECTOR).next().is_some()
+}
+
 fn parse_cursor(element: &ElementRef) -> Result<String, NitterError> {
     static CURSOR_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse(".show-more a").unwrap());
+
     let cursor = element
         .select(&CURSOR_SELECTOR)
         .last()

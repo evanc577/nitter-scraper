@@ -8,6 +8,8 @@ pub struct Tweet {
     pub user: User,
     pub full_text: String,
     pub images: Vec<String>,
+    pub retweet: bool,
+    pub pinned: bool,
 }
 
 #[derive(Debug, Serialize)]

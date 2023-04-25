@@ -11,7 +11,7 @@ use crate::tweet::{Tweet, User};
 
 pub fn parse_nitter_html(html: String) -> Result<(Vec<Tweet>, String), NitterError> {
     static TWEET_SELECTOR: Lazy<Selector> =
-        Lazy::new(|| Selector::parse(".timeline-item:not(.show-more)").unwrap());
+        Lazy::new(|| Selector::parse(".timeline-item:not(.show-more):not(.unavailable)").unwrap());
 
     let document = Html::parse_document(&html);
 

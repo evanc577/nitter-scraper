@@ -11,6 +11,7 @@ pub struct Tweet {
     pub images: Vec<String>,
     pub retweet: bool,
     pub reply: bool,
+    pub quote: bool,
     pub pinned: bool,
 }
 

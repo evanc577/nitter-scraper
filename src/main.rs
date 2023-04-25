@@ -1,3 +1,5 @@
+use std::io::Write;
+use std::process::ExitCode;
 use std::time::Duration;
 
 use clap::Parser;
@@ -31,7 +33,7 @@ struct Args {
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> ExitCode {
     let args = Args::parse();
 
     let client = Client::builder()
@@ -52,6 +54,20 @@ async fn main() {
 
     while let Some(tweet_result) = nitter_search.next().await {
         let tweet = tweet_result.unwrap();
-        println!("{}", serde_json::to_string(&tweet).unwrap());
+        if let Err(e) = writeln!(
+            std::io::stdout(),
+            "{}",
+            serde_json::to_string(&tweet).unwrap()
+        ) {
+            match e.kind() {
+                std::io::ErrorKind::BrokenPipe => break,
+                _ => {
+                    eprintln!("e");
+                    return ExitCode::FAILURE;
+                }
+            }
+        }
     }
+
+    ExitCode::SUCCESS
 }

@@ -1,4 +1,5 @@
 mod error;
+mod id_time;
 mod parse;
 mod tweet;
 
@@ -213,55 +214,84 @@ impl<'a> NitterScraper<'a> {
             NitterCursor::End => return Ok(vec![]),
         };
 
-        // Send request
-        let url = format!("{}{}{}", self.instance, self.query.url_path(), get_params);
-        let mut i = 0;
-        let response = loop {
-            let response = self
-                .client
-                .get(&url)
-                .header(COOKIE, "replaceTwitter=; replaceYouTube=; replaceReddit=")
-                .send()
-                .await
-                .map_err(|e| NitterError::Network(e.to_string()))?;
+        let mut nitter_retry = 0;
+        let tweets = loop {
+            // Send request
+            let url = format!("{}{}{}", self.instance, self.query.url_path(), get_params);
+            let mut i = 0;
+            let response = loop {
+                let response = self
+                    .client
+                    .get(&url)
+                    .header(COOKIE, "replaceTwitter=; replaceYouTube=; replaceReddit=")
+                    .send()
+                    .await
+                    .map_err(|e| NitterError::Network(e.to_string()))?;
 
-            if response.status() == StatusCode::TOO_MANY_REQUESTS {
-                // Retry if 429
-                if i < 10 {
-                    i += 1;
-                    let sleep_s = std::cmp::min(300, 1 << i);
-                    eprintln!(
-                        "Received status code {}, sleeping for {} seconds",
-                        response.status().as_u16(),
-                        sleep_s
-                    );
-                    tokio::time::sleep(Duration::from_secs(sleep_s)).await;
-                    continue;
-                } else {
+                if response.status() == StatusCode::TOO_MANY_REQUESTS {
+                    // Retry if 429
+                    if i < 10 {
+                        i += 1;
+                        let sleep_s = std::cmp::min(300, 1 << i);
+                        eprintln!(
+                            "Received status code {}, sleeping for {} seconds",
+                            response.status().as_u16(),
+                            sleep_s
+                        );
+                        tokio::time::sleep(Duration::from_secs(sleep_s)).await;
+                        continue;
+                    } else {
+                        return Err(NitterError::Network(format!(
+                            "received status code {}",
+                            response.status().as_u16()
+                        )));
+                    }
+                } else if response.status() == StatusCode::NOT_FOUND {
+                    // Return nothing on 404
+                    return Err(NitterError::NotFound);
+                } else if !response.status().is_success() {
+                    // Error if bad status code
                     return Err(NitterError::Network(format!(
                         "received status code {}",
                         response.status().as_u16()
                     )));
                 }
-            } else if response.status() == StatusCode::NOT_FOUND {
-                // Return nothing on 404
-                return Err(NitterError::NotFound);
-            } else if !response.status().is_success() {
-                // Error if bad status code
-                return Err(NitterError::Network(format!(
-                    "received status code {}",
-                    response.status().as_u16()
-                )));
+
+                break response;
+            };
+
+            let text = response.text().await.unwrap();
+
+            // Parse html and update cursor
+            let (tweets, cursor) = parse_nitter_html(text)?;
+
+            let tweets = if self.reorder_pinned {
+                // Extract pinned tweet
+                let (mut pinned, unpinned): (Vec<_>, Vec<_>) =
+                    tweets.into_iter().partition(|t| t.pinned);
+                if let Some(t) = pinned.pop() {
+                    if let Some(min_id) = self.min_id {
+                        if t.id >= min_id {
+                            self.state.pinned = Some(t);
+                        }
+                    } else {
+                        self.state.pinned = Some(t);
+                    }
+                }
+                unpinned
+            } else {
+                tweets
+            };
+
+            // Sometimes nitter will return nothing, retry a few times to make sure it's correct
+            if !tweets.is_empty() || nitter_retry > 10 {
+                self.state.cursor = cursor;
+                break tweets;
             }
 
-            break response;
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            nitter_retry += 1;
         };
-
-        let text = response.text().await.unwrap();
-
-        // Parse html and update cursor
-        let (tweets, cursor) = parse_nitter_html(text)?;
-        self.state.cursor = cursor;
 
         let tweets = if self.skip_retweets {
             // Filter out retweets
@@ -270,22 +300,6 @@ impl<'a> NitterScraper<'a> {
             tweets
         };
 
-        if self.reorder_pinned {
-            // Extract pinned tweet
-            let (mut pinned, unpinned): (Vec<_>, Vec<_>) =
-                tweets.into_iter().partition(|t| t.pinned);
-            if let Some(t) = pinned.pop() {
-                if let Some(min_id) = self.min_id {
-                    if t.id >= min_id {
-                        self.state.pinned = Some(t);
-                    }
-                } else {
-                    self.state.pinned = Some(t);
-                }
-            }
-            Ok(unpinned)
-        } else {
-            Ok(tweets)
-        }
+        Ok(tweets)
     }
 }

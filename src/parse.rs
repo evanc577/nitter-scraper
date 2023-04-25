@@ -6,15 +6,15 @@ use time::format_description::FormatItem;
 use time::macros::format_description;
 use time::PrimitiveDateTime;
 
-use crate::NitterCursor;
 use crate::error::NitterError;
 use crate::tweet::{Tweet, User};
+use crate::NitterCursor;
 
 pub fn parse_nitter_html(html: String) -> Result<(Vec<Tweet>, NitterCursor), NitterError> {
     static TWEET_SELECTOR: Lazy<Selector> =
         Lazy::new(|| Selector::parse(".timeline-item:not(.show-more):not(.unavailable)").unwrap());
 
-    let document = Html::parse_document(&html);
+    let mut document = Html::parse_document(&html);
 
     // Check if user is protected
     if parse_protected(&document.root_element()) {
@@ -31,6 +31,17 @@ pub fn parse_nitter_html(html: String) -> Result<(Vec<Tweet>, NitterCursor), Nit
         return Err(NitterError::NotFound);
     }
 
+    // Remove all quotes
+    static QUOTE_SELECTOR: Lazy<Selector> =
+        Lazy::new(|| Selector::parse(".quote > *:not(.quote-link)").unwrap());
+    let ids: Vec<_> = document
+        .select(&QUOTE_SELECTOR)
+        .map(|p_node| p_node.id())
+        .collect();
+    for id in ids {
+        document.tree.get_mut(id).unwrap().detach();
+    }
+
     let mut tweets = vec![];
     for element in document.select(&TWEET_SELECTOR) {
         // Parse individual tweets
@@ -44,6 +55,7 @@ pub fn parse_nitter_html(html: String) -> Result<(Vec<Tweet>, NitterCursor), Nit
         let (created_at, created_at_ts) = parse_tweet_time(&element)?;
         let retweet = parse_tweet_retweet(&element);
         let reply = parse_tweet_reply(&element);
+        let quote = parse_tweet_quote(&element);
         let pinned = parse_tweet_pinned(&element);
 
         tweets.push(Tweet {
@@ -55,6 +67,7 @@ pub fn parse_nitter_html(html: String) -> Result<(Vec<Tweet>, NitterCursor), Nit
             images,
             retweet,
             reply,
+            quote,
             pinned,
             user: User { screen_name },
         })
@@ -73,8 +86,7 @@ fn parse_protected(element: &ElementRef) -> bool {
     element.select(&PROTECTED_SELECTOR).next().is_some()
 }
 
-static ERROR_SELECTOR: Lazy<Selector> =
-    Lazy::new(|| Selector::parse("div.error-panel").unwrap());
+static ERROR_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("div.error-panel").unwrap());
 
 fn parse_suspended(element: &ElementRef) -> bool {
     element
@@ -197,8 +209,15 @@ fn parse_tweet_reply(element: &ElementRef) -> bool {
     element.select(&REPLY_SELECTOR).next().is_some()
 }
 
+fn parse_tweet_quote(element: &ElementRef) -> bool {
+    static QUOTE_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse(".quote").unwrap());
+
+    element.select(&QUOTE_SELECTOR).next().is_some()
+}
+
 fn parse_cursor(element: &ElementRef) -> NitterCursor {
-    static CURSOR_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse(".show-more:not(.timeline-item) a").unwrap());
+    static CURSOR_SELECTOR: Lazy<Selector> =
+        Lazy::new(|| Selector::parse(".show-more:not(.timeline-item) a").unwrap());
 
     let cursor = element
         .select(&CURSOR_SELECTOR)

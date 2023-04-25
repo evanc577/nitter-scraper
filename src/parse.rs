@@ -1,7 +1,7 @@
 use once_cell::sync::Lazy;
 use regex::Regex;
 use scraper::{ElementRef, Html, Selector};
-use time::format_description::well_known::Rfc3339;
+use time::format_description::well_known::Rfc2822;
 use time::format_description::FormatItem;
 use time::macros::format_description;
 use time::PrimitiveDateTime;
@@ -122,7 +122,7 @@ fn parse_tweet_time(element: &ElementRef) -> Result<String, NitterError> {
         .next()
         .and_then(|tweet_date_element| tweet_date_element.value().attr("title"))
         .and_then(|time_str| PrimitiveDateTime::parse(time_str, TIME_FORMAT_DESCRIPTION).ok())
-        .and_then(|time| time.assume_utc().format(&Rfc3339).ok())
+        .and_then(|time| time.assume_utc().format(&Rfc2822).ok())
         .ok_or_else(|| NitterError::Parse("missing time".into()))
 }
 

@@ -4,6 +4,7 @@ pub enum NitterError {
     Network(String),
     ProtectedAccount,
     SuspendedAccount,
+    NotFound,
 }
 
 impl std::fmt::Display for NitterError {
@@ -13,6 +14,7 @@ impl std::fmt::Display for NitterError {
             Self::Network(s) => write!(f, "unable to send request: {}", s),
             Self::ProtectedAccount => write!(f, "account is protected"),
             Self::SuspendedAccount => write!(f, "account is suspended"),
+            Self::NotFound => write!(f, "account not found"),
         }
     }
 }

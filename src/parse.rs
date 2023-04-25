@@ -26,6 +26,11 @@ pub fn parse_nitter_html(html: String) -> Result<(Vec<Tweet>, NitterCursor), Nit
         return Err(NitterError::SuspendedAccount);
     }
 
+    // Check if user not found
+    if parse_not_found(&document.root_element()) {
+        return Err(NitterError::NotFound);
+    }
+
     let mut tweets = vec![];
     for element in document.select(&TWEET_SELECTOR) {
         // Parse individual tweets
@@ -68,15 +73,24 @@ fn parse_protected(element: &ElementRef) -> bool {
     element.select(&PROTECTED_SELECTOR).next().is_some()
 }
 
-fn parse_suspended(element: &ElementRef) -> bool {
-    static ERROR_SELECTOR: Lazy<Selector> =
-        Lazy::new(|| Selector::parse("div.error-panel").unwrap());
+static ERROR_SELECTOR: Lazy<Selector> =
+    Lazy::new(|| Selector::parse("div.error-panel").unwrap());
 
+fn parse_suspended(element: &ElementRef) -> bool {
     element
         .select(&ERROR_SELECTOR)
         .next()
         .and_then(|element| element.text().next())
         .and_then(|text| Some(text.contains("has been suspended")))
+        .eq(&Some(true))
+}
+
+fn parse_not_found(element: &ElementRef) -> bool {
+    element
+        .select(&ERROR_SELECTOR)
+        .next()
+        .and_then(|element| element.text().next())
+        .and_then(|text| Some(text.contains("not found")))
         .eq(&Some(true))
 }
 

@@ -156,7 +156,11 @@ impl<'a> NitterScraper<'a> {
                     Ok(tweets) => {
                         state.state.tweets.extend(tweets.into_iter());
                     }
-                    Err(NitterError::ProtectedAccount | NitterError::SuspendedAccount) => {
+                    Err(
+                        | NitterError::ProtectedAccount
+                        | NitterError::SuspendedAccount
+                        | NitterError::NotFound,
+                    ) => {
                         return None;
                     }
                     Err(e) => {
@@ -241,7 +245,7 @@ impl<'a> NitterScraper<'a> {
                 }
             } else if response.status() == StatusCode::NOT_FOUND {
                 // Return nothing on 404
-                return Ok(vec![]);
+                return Err(NitterError::NotFound);
             } else if !response.status().is_success() {
                 // Error if bad status code
                 return Err(NitterError::Network(format!(

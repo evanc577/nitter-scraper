@@ -124,8 +124,9 @@ impl<'a> NitterScraper<'a> {
                 }
             }
 
-            // Dirty hack
-            for i in 0..2 {
+            // Since skip-retweets may cause entire page to be empty, loop until cursor doesn't
+            // exist anymore
+            loop {
                 // Return tweet if available
                 if let Some(tweet) = state.state.tweets.iter().next() {
                     match Self::should_return_tweet(
@@ -146,7 +147,7 @@ impl<'a> NitterScraper<'a> {
                     }
                 }
 
-                if i != 0 {
+                if let NitterCursor::End = state.state.cursor {
                     break;
                 }
 
@@ -165,6 +166,7 @@ impl<'a> NitterScraper<'a> {
                 }
             }
 
+            // Return pinned tweet if needed
             if let Some(t) = state.state.pinned.take() {
                 return Some((Ok(t), state));
             }

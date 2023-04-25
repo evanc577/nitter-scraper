@@ -184,7 +184,7 @@ fn parse_tweet_reply(element: &ElementRef) -> bool {
 }
 
 fn parse_cursor(element: &ElementRef) -> NitterCursor {
-    static CURSOR_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse(".show-more a").unwrap());
+    static CURSOR_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse(".show-more:not(.timeline-item) a").unwrap());
 
     let cursor = element
         .select(&CURSOR_SELECTOR)

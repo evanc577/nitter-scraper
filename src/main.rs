@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use clap::Parser;
 use futures_util::StreamExt;
 use nitter_scraper::{NitterQuery, NitterScraper};
@@ -32,7 +34,10 @@ struct Args {
 async fn main() {
     let args = Args::parse();
 
-    let client = Client::new();
+    let client = Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build()
+        .unwrap();
     let mut nitter_scraper = NitterScraper::builder()
         .client(&client)
         .instance(args.instance)

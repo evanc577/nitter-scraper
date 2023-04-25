@@ -3,6 +3,7 @@ mod parse;
 mod tweet;
 
 use std::collections::VecDeque;
+use std::time::Duration;
 
 #[cfg(feature = "bin")]
 use clap::Subcommand;
@@ -11,7 +12,7 @@ use futures_util::Stream;
 use parse::parse_nitter_html;
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use reqwest::header::COOKIE;
-use reqwest::Client;
+use reqwest::{Client, StatusCode};
 use tweet::Tweet;
 use typed_builder::TypedBuilder;
 
@@ -187,19 +188,49 @@ impl<'a> NitterScraper<'a> {
 
         // Send request
         let url = format!("{}{}{}", self.instance, self.query.url_path(), get_params);
-        let response = self
-            .client
-            .get(url)
-            .header(COOKIE, "replaceTwitter=; replaceYouTube=; replaceReddit=")
-            .send()
-            .await
-            .unwrap()
-            .error_for_status()
-            .unwrap();
+        let mut i = 0;
+        let response = loop {
+            let response = self
+                .client
+                .get(&url)
+                .header(COOKIE, "replaceTwitter=; replaceYouTube=; replaceReddit=")
+                .send()
+                .await
+                .map_err(|e| NitterError::Network(e.to_string()))?;
+
+            if response.status() == StatusCode::TOO_MANY_REQUESTS {
+                // Retry if 429
+                if i < 10 {
+                    i += 1;
+                    let sleep_s = std::cmp::min(300, 1 << i);
+                    eprintln!(
+                        "Received status code {}, sleeping for {} seconds",
+                        response.status().as_u16(),
+                        sleep_s
+                    );
+                    tokio::time::sleep(Duration::from_secs(sleep_s)).await;
+                    continue;
+                } else {
+                    return Err(NitterError::Network(format!(
+                        "received status code {}",
+                        response.status().as_u16()
+                    )));
+                }
+            } else if !response.status().is_success() {
+                // Error if bad status code
+                return Err(NitterError::Network(format!(
+                    "received status code {}",
+                    response.status().as_u16()
+                )));
+            }
+
+            break response;
+        };
+
         let text = response.text().await.unwrap();
 
         // Parse html and update cursor
-        let (tweets, cursor) = parse_nitter_html(text).unwrap();
+        let (tweets, cursor) = parse_nitter_html(text)?;
         self.state.cursor = Some(cursor);
 
         let tweets = if self.skip_retweets {

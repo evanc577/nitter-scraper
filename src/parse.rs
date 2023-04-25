@@ -20,9 +20,11 @@ pub fn parse_nitter_html(html: String) -> Result<(Vec<Tweet>, String), NitterErr
         // Parse individual tweets
         let screen_name = parse_tweet_screen_name(&element)?;
         let id_str = parse_tweet_id_str(&element)?;
-        let id = id_str.parse().unwrap();
+        let id = id_str
+            .parse()
+            .map_err(|_| NitterError::Parse(format!("invalid id {:?}", id_str)))?;
         let full_text = parse_tweet_body(&element)?;
-        let images = parse_tweet_images(&element)?;
+        let images = parse_tweet_images(&element);
         let created_at = parse_tweet_time(&element)?;
         let retweet = parse_tweet_retweet(&element);
         let pinned = parse_tweet_pinned(&element);
@@ -50,19 +52,25 @@ static TWEET_LINK_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"^/(?P<screen_name>\w+)/status/(?P<id>\d+)").unwrap());
 
 fn parse_tweet_screen_name(element: &ElementRef) -> Result<String, NitterError> {
-    let tweet_link_element = element.select(&TWEET_LINK_SELECTOR).next().unwrap();
-    let tweet_link = tweet_link_element.value().attr("href").unwrap();
-    let caps = TWEET_LINK_RE.captures(tweet_link).unwrap();
-    let screen_name = caps.name("screen_name").unwrap().as_str();
-    Ok(screen_name.to_owned())
+    element
+        .select(&TWEET_LINK_SELECTOR)
+        .next()
+        .and_then(|tweet_link_element| tweet_link_element.value().attr("href"))
+        .and_then(|tweet_link| TWEET_LINK_RE.captures(tweet_link))
+        .and_then(|caps| caps.name("screen_name"))
+        .and_then(|cap| Some(cap.as_str().to_owned()))
+        .ok_or_else(|| NitterError::Parse("missing screen_name".into()))
 }
 
 fn parse_tweet_id_str(element: &ElementRef) -> Result<String, NitterError> {
-    let tweet_link_element = element.select(&TWEET_LINK_SELECTOR).next().unwrap();
-    let tweet_link = tweet_link_element.value().attr("href").unwrap();
-    let caps = TWEET_LINK_RE.captures(tweet_link).unwrap();
-    let id = caps.name("id").unwrap().as_str();
-    Ok(id.to_owned())
+    element
+        .select(&TWEET_LINK_SELECTOR)
+        .next()
+        .and_then(|tweet_link_element| tweet_link_element.value().attr("href"))
+        .and_then(|tweet_link| TWEET_LINK_RE.captures(tweet_link))
+        .and_then(|caps| caps.name("id"))
+        .and_then(|cap| Some(cap.as_str().to_owned()))
+        .ok_or_else(|| NitterError::Parse("missing id".into()))
 }
 
 fn parse_tweet_body(element: &ElementRef) -> Result<String, NitterError> {
@@ -72,14 +80,14 @@ fn parse_tweet_body(element: &ElementRef) -> Result<String, NitterError> {
     let full_text: String = element
         .select(&TWEET_BODY_SELECTOR)
         .next()
-        .unwrap()
+        .ok_or_else(|| NitterError::Parse("missing body".into()))?
         .text()
         .into_iter()
         .collect();
     Ok(full_text)
 }
 
-fn parse_tweet_images(element: &ElementRef) -> Result<Vec<String>, NitterError> {
+fn parse_tweet_images(element: &ElementRef) -> Vec<String> {
     static IMAGES_SELECTOR: Lazy<Selector> =
         Lazy::new(|| Selector::parse(".attachment.image a.still-image").unwrap());
     static IMAGE_ID_RE: Lazy<Regex> =
@@ -89,17 +97,17 @@ fn parse_tweet_images(element: &ElementRef) -> Result<Vec<String>, NitterError> 
         .select(&IMAGES_SELECTOR)
         .into_iter()
         .filter_map(|e| {
-            let link = e.value().attr("href").unwrap();
+            let link = e.value().attr("href")?;
             match IMAGE_ID_RE.captures(link) {
                 Some(caps) => Some(format!(
                     "https://pbs.twimg.com/media/{}",
-                    caps.name("url").unwrap().as_str()
+                    caps.name("url")?.as_str()
                 )),
                 None => None,
             }
         })
         .collect();
-    Ok(images)
+    images
 }
 
 fn parse_tweet_time(element: &ElementRef) -> Result<String, NitterError> {
@@ -109,14 +117,13 @@ fn parse_tweet_time(element: &ElementRef) -> Result<String, NitterError> {
         "[month repr:short] [day padding:none], [year] · [hour repr:12 padding:none]:[minute] [period] UTC"
     );
 
-    let created_at = {
-        let tweet_date_element = element.select(&TWEET_DATE_SELECTOR).next().unwrap();
-        let time_str = tweet_date_element.value().attr("title").unwrap();
-        let time = PrimitiveDateTime::parse(time_str, TIME_FORMAT_DESCRIPTION).unwrap();
-        let time = time.assume_utc();
-        time.format(&Rfc3339).unwrap()
-    };
-    Ok(created_at)
+    element
+        .select(&TWEET_DATE_SELECTOR)
+        .next()
+        .and_then(|tweet_date_element| tweet_date_element.value().attr("title"))
+        .and_then(|time_str| PrimitiveDateTime::parse(time_str, TIME_FORMAT_DESCRIPTION).ok())
+        .and_then(|time| time.assume_utc().format(&Rfc3339).ok())
+        .ok_or_else(|| NitterError::Parse("missing time".into()))
 }
 
 fn parse_tweet_retweet(element: &ElementRef) -> bool {
@@ -127,8 +134,7 @@ fn parse_tweet_retweet(element: &ElementRef) -> bool {
 }
 
 fn parse_tweet_pinned(element: &ElementRef) -> bool {
-    static PINNED_SELECTOR: Lazy<Selector> =
-        Lazy::new(|| Selector::parse(".pinned").unwrap());
+    static PINNED_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse(".pinned").unwrap());
 
     element.select(&PINNED_SELECTOR).next().is_some()
 }
@@ -136,13 +142,10 @@ fn parse_tweet_pinned(element: &ElementRef) -> bool {
 fn parse_cursor(element: &ElementRef) -> Result<String, NitterError> {
     static CURSOR_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse(".show-more a").unwrap());
 
-    let cursor = element
+    element
         .select(&CURSOR_SELECTOR)
         .last()
-        .unwrap()
-        .value()
-        .attr("href")
-        .unwrap()
-        .to_owned();
-    Ok(cursor)
+        .and_then(|cursor_element| cursor_element.value().attr("href"))
+        .and_then(|cursor| Some(cursor.to_owned()))
+        .ok_or_else(|| NitterError::Parse("missing cursor".into()))
 }

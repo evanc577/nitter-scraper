@@ -14,10 +14,15 @@ pub fn parse_nitter_html(html: String) -> Result<(Vec<Tweet>, String), NitterErr
         Lazy::new(|| Selector::parse(".timeline-item:not(.show-more)").unwrap());
 
     let document = Html::parse_document(&html);
-    
+
     // Check if user is protected
     if parse_protected(&document.root_element()) {
         return Err(NitterError::ProtectedAccount);
+    }
+
+    // Check if user is suspended
+    if parse_suspended(&document.root_element()) {
+        return Err(NitterError::SuspendedAccount);
     }
 
     let mut tweets = vec![];
@@ -53,9 +58,22 @@ pub fn parse_nitter_html(html: String) -> Result<(Vec<Tweet>, String), NitterErr
 }
 
 fn parse_protected(element: &ElementRef) -> bool {
-    static PROTECTED_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("div.timeline-protected").unwrap());
+    static PROTECTED_SELECTOR: Lazy<Selector> =
+        Lazy::new(|| Selector::parse("div.timeline-protected").unwrap());
 
     element.select(&PROTECTED_SELECTOR).next().is_some()
+}
+
+fn parse_suspended(element: &ElementRef) -> bool {
+    static ERROR_SELECTOR: Lazy<Selector> =
+        Lazy::new(|| Selector::parse("div.error-panel").unwrap());
+
+    element
+        .select(&ERROR_SELECTOR)
+        .next()
+        .and_then(|element| element.text().next())
+        .and_then(|text| Some(text.contains("has been suspended")))
+        .eq(&Some(true))
 }
 
 static TWEET_LINK_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("a.tweet-link").unwrap());

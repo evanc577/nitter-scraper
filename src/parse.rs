@@ -6,10 +6,11 @@ use time::format_description::FormatItem;
 use time::macros::format_description;
 use time::PrimitiveDateTime;
 
+use crate::NitterCursor;
 use crate::error::NitterError;
 use crate::tweet::{Tweet, User};
 
-pub fn parse_nitter_html(html: String) -> Result<(Vec<Tweet>, String), NitterError> {
+pub fn parse_nitter_html(html: String) -> Result<(Vec<Tweet>, NitterCursor), NitterError> {
     static TWEET_SELECTOR: Lazy<Selector> =
         Lazy::new(|| Selector::parse(".timeline-item:not(.show-more):not(.unavailable)").unwrap());
 
@@ -52,7 +53,7 @@ pub fn parse_nitter_html(html: String) -> Result<(Vec<Tweet>, String), NitterErr
     }
 
     // Parse pagination cursor
-    let cursor = parse_cursor(&document.root_element())?;
+    let cursor = parse_cursor(&document.root_element());
 
     Ok((tweets, cursor))
 }
@@ -168,13 +169,16 @@ fn parse_tweet_pinned(element: &ElementRef) -> bool {
     element.select(&PINNED_SELECTOR).next().is_some()
 }
 
-fn parse_cursor(element: &ElementRef) -> Result<String, NitterError> {
+fn parse_cursor(element: &ElementRef) -> NitterCursor {
     static CURSOR_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse(".show-more a").unwrap());
 
-    element
+    let cursor = element
         .select(&CURSOR_SELECTOR)
         .last()
         .and_then(|cursor_element| cursor_element.value().attr("href"))
-        .and_then(|cursor| Some(cursor.to_owned()))
-        .ok_or_else(|| NitterError::Parse("missing cursor".into()))
+        .and_then(|cursor| Some(cursor.to_owned()));
+    match cursor {
+        Some(c) => NitterCursor::More(c),
+        None => NitterCursor::End,
+    }
 }

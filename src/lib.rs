@@ -41,13 +41,26 @@ pub struct NitterScraper<'a> {
     state: NitterSearchState,
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug, Default)]
 struct NitterSearchState {
     tweets: VecDeque<Tweet>,
-    cursor: Option<String>,
+    cursor: NitterCursor,
     count: usize,
     errored: bool,
     pinned: Option<Tweet>,
+}
+
+#[derive(Debug)]
+pub enum NitterCursor {
+    Initial,
+    More(String),
+    End,
+}
+
+impl Default for NitterCursor {
+    fn default() -> Self {
+        Self::Initial
+    }
 }
 
 #[cfg_attr(feature = "bin", derive(Subcommand))]
@@ -152,6 +165,10 @@ impl<'a> NitterScraper<'a> {
                 }
             }
 
+            if let Some(t) = state.state.pinned.take() {
+                return Some((Ok(t), state));
+            }
+
             None
         })
     }
@@ -185,8 +202,9 @@ impl<'a> NitterScraper<'a> {
     async fn scrape_page(&mut self) -> Result<Vec<Tweet>, NitterError> {
         // Use cursor if it exists
         let get_params = match self.state.cursor {
-            Some(ref c) => c.clone(),
-            None => self.query.encode_get_params(),
+            NitterCursor::Initial => self.query.encode_get_params(),
+            NitterCursor::More(ref c) => c.clone(),
+            NitterCursor::End => return Ok(vec![]),
         };
 
         // Send request
@@ -237,7 +255,7 @@ impl<'a> NitterScraper<'a> {
 
         // Parse html and update cursor
         let (tweets, cursor) = parse_nitter_html(text)?;
-        self.state.cursor = Some(cursor);
+        self.state.cursor = cursor;
 
         let tweets = if self.skip_retweets {
             // Filter out retweets

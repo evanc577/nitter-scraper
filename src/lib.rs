@@ -93,9 +93,9 @@ impl NitterQuery {
         match self {
             Self::Search { .. } => "/search".into(),
             Self::User { user } => format!("/{}", user),
-            Self::UserWithReplies { user } => format!("/{}", user),
-            Self::UserMedia { user } => format!("/{}", user),
-            Self::UserSearch { user, .. } => format!("/{}", user),
+            Self::UserWithReplies { user } => format!("/{}/with_replies", user),
+            Self::UserMedia { user } => format!("/{}/media", user),
+            Self::UserSearch { user, .. } => format!("/{}/search", user),
         }
     }
 }
@@ -182,7 +182,7 @@ impl<'a> NitterScraper<'a> {
         if reorder_pinned {
             if let Some(p) = pinned {
                 // Should use tweet id here but nitter doesn't expose it for retweets
-                if p.created_at > tweet.created_at {
+                if p.created_at_ts > tweet.created_at_ts {
                     return ReturnedTweet::Pinned;
                 }
             }

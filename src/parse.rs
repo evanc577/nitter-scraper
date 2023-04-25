@@ -36,17 +36,20 @@ pub fn parse_nitter_html(html: String) -> Result<(Vec<Tweet>, NitterCursor), Nit
             .map_err(|_| NitterError::Parse(format!("invalid id {:?}", id_str)))?;
         let full_text = parse_tweet_body(&element)?;
         let images = parse_tweet_images(&element);
-        let created_at = parse_tweet_time(&element)?;
+        let (created_at, created_at_ts) = parse_tweet_time(&element)?;
         let retweet = parse_tweet_retweet(&element);
+        let reply = parse_tweet_reply(&element);
         let pinned = parse_tweet_pinned(&element);
 
         tweets.push(Tweet {
             id,
             id_str,
             created_at,
+            created_at_ts,
             full_text,
             images,
             retweet,
+            reply,
             pinned,
             user: User { screen_name },
         })
@@ -140,20 +143,25 @@ fn parse_tweet_images(element: &ElementRef) -> Vec<String> {
     images
 }
 
-fn parse_tweet_time(element: &ElementRef) -> Result<String, NitterError> {
+fn parse_tweet_time(element: &ElementRef) -> Result<(String, i64), NitterError> {
     static TWEET_DATE_SELECTOR: Lazy<Selector> =
         Lazy::new(|| Selector::parse("span.tweet-date a").unwrap());
     static TIME_FORMAT_DESCRIPTION: &[FormatItem<'_>] = format_description!(
         "[month repr:short] [day padding:none], [year] · [hour repr:12 padding:none]:[minute] [period] UTC"
     );
 
-    element
+    let time = element
         .select(&TWEET_DATE_SELECTOR)
         .next()
         .and_then(|tweet_date_element| tweet_date_element.value().attr("title"))
         .and_then(|time_str| PrimitiveDateTime::parse(time_str, TIME_FORMAT_DESCRIPTION).ok())
-        .and_then(|time| time.assume_utc().format(&Rfc2822).ok())
-        .ok_or_else(|| NitterError::Parse("missing time".into()))
+        .and_then(|time| Some(time.assume_utc()));
+
+    if let Some(t) = time {
+        Ok((t.format(&Rfc2822).unwrap(), t.unix_timestamp()))
+    } else {
+        Err(NitterError::Parse("missing time".into()))
+    }
 }
 
 fn parse_tweet_retweet(element: &ElementRef) -> bool {
@@ -167,6 +175,12 @@ fn parse_tweet_pinned(element: &ElementRef) -> bool {
     static PINNED_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse(".pinned").unwrap());
 
     element.select(&PINNED_SELECTOR).next().is_some()
+}
+
+fn parse_tweet_reply(element: &ElementRef) -> bool {
+    static REPLY_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse(".replying-to").unwrap());
+
+    element.select(&REPLY_SELECTOR).next().is_some()
 }
 
 fn parse_cursor(element: &ElementRef) -> NitterCursor {

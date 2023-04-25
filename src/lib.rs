@@ -216,6 +216,9 @@ impl<'a> NitterScraper<'a> {
                         response.status().as_u16()
                     )));
                 }
+            } else if response.status() == StatusCode::NOT_FOUND {
+                // Return nothing on 404
+                return Ok(vec![]);
             } else if !response.status().is_success() {
                 // Error if bad status code
                 return Err(NitterError::Network(format!(

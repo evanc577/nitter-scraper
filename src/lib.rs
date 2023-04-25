@@ -143,7 +143,7 @@ impl<'a> NitterScraper<'a> {
                             state.state.count += 1;
                             return Some((Ok(state.state.pinned.take().unwrap()), state));
                         }
-                        ReturnedTweet::None => (),
+                        ReturnedTweet::None => break,
                     }
                 }
 
@@ -157,7 +157,7 @@ impl<'a> NitterScraper<'a> {
                         state.state.tweets.extend(tweets.into_iter());
                     }
                     Err(
-                        | NitterError::ProtectedAccount
+                        NitterError::ProtectedAccount
                         | NitterError::SuspendedAccount
                         | NitterError::NotFound,
                     ) => {
@@ -274,8 +274,14 @@ impl<'a> NitterScraper<'a> {
             // Extract pinned tweet
             let (mut pinned, unpinned): (Vec<_>, Vec<_>) =
                 tweets.into_iter().partition(|t| t.pinned);
-            if let t @ Some(_) = pinned.pop() {
-                self.state.pinned = t;
+            if let Some(t) = pinned.pop() {
+                if let Some(min_id) = self.min_id {
+                    if t.id >= min_id {
+                        self.state.pinned = Some(t);
+                    }
+                } else {
+                    self.state.pinned = Some(t);
+                }
             }
             Ok(unpinned)
         } else {

@@ -13,9 +13,14 @@ pub fn parse_nitter_html(html: String) -> Result<(Vec<Tweet>, String), NitterErr
     static TWEET_SELECTOR: Lazy<Selector> =
         Lazy::new(|| Selector::parse(".timeline-item:not(.show-more)").unwrap());
 
-    let mut tweets = vec![];
-
     let document = Html::parse_document(&html);
+    
+    // Check if user is protected
+    if parse_protected(&document.root_element()) {
+        return Err(NitterError::ProtectedAccount);
+    }
+
+    let mut tweets = vec![];
     for element in document.select(&TWEET_SELECTOR) {
         // Parse individual tweets
         let screen_name = parse_tweet_screen_name(&element)?;
@@ -45,6 +50,12 @@ pub fn parse_nitter_html(html: String) -> Result<(Vec<Tweet>, String), NitterErr
     let cursor = parse_cursor(&document.root_element())?;
 
     Ok((tweets, cursor))
+}
+
+fn parse_protected(element: &ElementRef) -> bool {
+    static PROTECTED_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("div.timeline-protected").unwrap());
+
+    element.select(&PROTECTED_SELECTOR).next().is_some()
 }
 
 static TWEET_LINK_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("a.tweet-link").unwrap());

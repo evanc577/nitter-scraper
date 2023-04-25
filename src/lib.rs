@@ -142,6 +142,9 @@ impl<'a> NitterScraper<'a> {
                     Ok(tweets) => {
                         state.state.tweets.extend(tweets.into_iter());
                     }
+                    Err(NitterError::ProtectedAccount) => {
+                        return None;
+                    }
                     Err(e) => {
                         state.state.errored = true;
                         return Some((Err(e), state));

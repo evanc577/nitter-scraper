@@ -2,6 +2,7 @@
 pub enum NitterError {
     Parse(String),
     Network(String),
+    ProtectedAccount,
 }
 
 impl std::fmt::Display for NitterError {
@@ -9,6 +10,7 @@ impl std::fmt::Display for NitterError {
         match self {
             Self::Parse(s) => write!(f, "unable to parse nitter: {}", s),
             Self::Network(s) => write!(f, "unable to send request: {}", s),
+            Self::ProtectedAccount => write!(f, "account is protected"),
         }
     }
 }

@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use clap::Parser;
 use futures_util::StreamExt;
-use nitter_scraper::{NitterQuery, NitterScraper};
+use nitter_scraper::{NitterError, NitterQuery, NitterScraper};
 use reqwest::Client;
 
 #[derive(Parser)]
@@ -53,7 +53,26 @@ async fn main() -> ExitCode {
     futures_util::pin_mut!(nitter_search);
 
     while let Some(tweet_result) = nitter_search.next().await {
-        let tweet = tweet_result.unwrap();
+        let tweet = match tweet_result {
+            Err(NitterError::NotFound) => {
+                eprintln!("account not found");
+                return ExitCode::from(10);
+            }
+            Err(NitterError::SuspendedAccount) => {
+                eprintln!("account suspended");
+                return ExitCode::from(10);
+            }
+            Err(NitterError::ProtectedAccount) => {
+                eprintln!("account is protected");
+                return ExitCode::from(10);
+            }
+            Err(e) => {
+                eprintln!("Error: {}", e);
+                return ExitCode::FAILURE;
+            }
+            Ok(t) => t,
+        };
+
         if let Err(e) = writeln!(
             std::io::stdout(),
             "{}",

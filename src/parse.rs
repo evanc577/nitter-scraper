@@ -7,8 +7,8 @@ use time::macros::format_description;
 use time::PrimitiveDateTime;
 
 use crate::error::NitterError;
+use crate::nitter_scraper::NitterCursor;
 use crate::tweet::{Tweet, User};
-use crate::NitterCursor;
 
 pub fn parse_nitter_html(html: String) -> Result<(Vec<Tweet>, NitterCursor), NitterError> {
     static TWEET_SELECTOR: Lazy<Selector> =

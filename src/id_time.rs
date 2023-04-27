@@ -13,7 +13,7 @@ fn id_post_snowflake(id: u128) -> OffsetDateTime {
     let id = id as i64;
     let offset = 1288834974657;
     let timestamp = (id >> 22) + offset;
-    OffsetDateTime::from_unix_timestamp(timestamp as i64).unwrap()
+    OffsetDateTime::from_unix_timestamp(timestamp).unwrap()
 }
 
 fn id_pre_snowflake(id: u128) -> OffsetDateTime {

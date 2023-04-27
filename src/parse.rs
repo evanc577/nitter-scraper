@@ -93,7 +93,7 @@ fn parse_suspended(element: &ElementRef) -> bool {
         .select(&ERROR_SELECTOR)
         .next()
         .and_then(|element| element.text().next())
-        .and_then(|text| Some(text.contains("has been suspended")))
+        .map(|text| text.contains("has been suspended"))
         .eq(&Some(true))
 }
 
@@ -102,7 +102,7 @@ fn parse_not_found(element: &ElementRef) -> bool {
         .select(&ERROR_SELECTOR)
         .next()
         .and_then(|element| element.text().next())
-        .and_then(|text| Some(text.contains("not found")))
+        .map(|text| text.contains("not found"))
         .eq(&Some(true))
 }
 
@@ -117,7 +117,7 @@ fn parse_tweet_screen_name(element: &ElementRef) -> Result<String, NitterError> 
         .and_then(|tweet_link_element| tweet_link_element.value().attr("href"))
         .and_then(|tweet_link| TWEET_LINK_RE.captures(tweet_link))
         .and_then(|caps| caps.name("screen_name"))
-        .and_then(|cap| Some(cap.as_str().to_owned()))
+        .map(|cap| cap.as_str().to_owned())
         .ok_or_else(|| NitterError::Parse("missing screen_name".into()))
 }
 
@@ -128,7 +128,7 @@ fn parse_tweet_id_str(element: &ElementRef) -> Result<String, NitterError> {
         .and_then(|tweet_link_element| tweet_link_element.value().attr("href"))
         .and_then(|tweet_link| TWEET_LINK_RE.captures(tweet_link))
         .and_then(|caps| caps.name("id"))
-        .and_then(|cap| Some(cap.as_str().to_owned()))
+        .map(|cap| cap.as_str().to_owned())
         .ok_or_else(|| NitterError::Parse("missing id".into()))
 }
 
@@ -181,7 +181,7 @@ fn parse_tweet_time(element: &ElementRef) -> Result<(String, i64), NitterError> 
         .next()
         .and_then(|tweet_date_element| tweet_date_element.value().attr("title"))
         .and_then(|time_str| PrimitiveDateTime::parse(time_str, TIME_FORMAT_DESCRIPTION).ok())
-        .and_then(|time| Some(time.assume_utc()));
+        .map(|time| time.assume_utc());
 
     if let Some(t) = time {
         Ok((t.format(&Rfc2822).unwrap(), t.unix_timestamp()))
@@ -223,7 +223,7 @@ fn parse_cursor(element: &ElementRef) -> NitterCursor {
         .select(&CURSOR_SELECTOR)
         .last()
         .and_then(|cursor_element| cursor_element.value().attr("href"))
-        .and_then(|cursor| Some(cursor.to_owned()));
+        .map(|cursor| cursor.to_owned());
     match cursor {
         Some(c) => NitterCursor::More(c),
         None => NitterCursor::End,

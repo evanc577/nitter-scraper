@@ -1,3 +1,5 @@
+use std::process::ExitCode;
+
 #[derive(Debug)]
 pub enum NitterError {
     Parse(String),
@@ -15,6 +17,15 @@ impl std::fmt::Display for NitterError {
             Self::ProtectedAccount => write!(f, "account is protected"),
             Self::SuspendedAccount => write!(f, "account is suspended"),
             Self::NotFound => write!(f, "account not found"),
+        }
+    }
+}
+
+impl NitterError {
+    pub fn exit_code(&self) -> ExitCode {
+        match self {
+            Self::ProtectedAccount | Self::SuspendedAccount | Self::NotFound => ExitCode::from(10),
+            _ => ExitCode::FAILURE,
         }
     }
 }

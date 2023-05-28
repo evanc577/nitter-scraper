@@ -12,7 +12,7 @@ use crate::tweet::{Tweet, User};
 
 pub fn parse_nitter_html(html: String) -> Result<(Vec<Tweet>, NitterCursor), NitterError> {
     static TWEET_SELECTOR: Lazy<Selector> =
-        Lazy::new(|| Selector::parse(".timeline-item:not(.show-more):not(.unavailable)").unwrap());
+        Lazy::new(|| Selector::parse(".timeline-item:not(.show-more):not(.unavailable):not(.threadunavailable)").unwrap());
 
     let mut document = Html::parse_document(&html);
 
@@ -44,39 +44,43 @@ pub fn parse_nitter_html(html: String) -> Result<(Vec<Tweet>, NitterCursor), Nit
 
     let mut tweets = vec![];
     for element in document.select(&TWEET_SELECTOR) {
-        // Parse individual tweets
-        let screen_name = parse_tweet_screen_name(&element)?;
-        let id_str = parse_tweet_id_str(&element)?;
-        let id = id_str
-            .parse()
-            .map_err(|_| NitterError::Parse(format!("invalid id {:?}", id_str)))?;
-        let full_text = parse_tweet_body(&element)?;
-        let images = parse_tweet_images(&element);
-        let (created_at, created_at_ts) = parse_tweet_time(&element)?;
-        let retweet = parse_tweet_retweet(&element);
-        let reply = parse_tweet_reply(&element);
-        let quote = parse_tweet_quote(&element);
-        let pinned = parse_tweet_pinned(&element);
-
-        tweets.push(Tweet {
-            id,
-            id_str,
-            created_at,
-            created_at_ts,
-            full_text,
-            images,
-            retweet,
-            reply,
-            quote,
-            pinned,
-            user: User { screen_name },
-        })
+        tweets.push(parse_tweet(element)?);
     }
 
     // Parse pagination cursor
     let cursor = parse_cursor(&document.root_element());
 
     Ok((tweets, cursor))
+}
+
+fn parse_tweet(element: ElementRef) -> Result<Tweet, NitterError> {
+    // Parse individual tweets
+    let screen_name = parse_tweet_screen_name(&element)?;
+    let id_str = parse_tweet_id_str(&element)?;
+    let id = id_str
+        .parse()
+        .map_err(|_| NitterError::Parse(format!("invalid id {:?}", id_str)))?;
+    let full_text = parse_tweet_body(&element)?;
+    let images = parse_tweet_images(&element);
+    let (created_at, created_at_ts) = parse_tweet_time(&element)?;
+    let retweet = parse_tweet_retweet(&element);
+    let reply = parse_tweet_reply(&element);
+    let quote = parse_tweet_quote(&element);
+    let pinned = parse_tweet_pinned(&element);
+
+    Ok(Tweet {
+        id,
+        id_str,
+        created_at,
+        created_at_ts,
+        full_text,
+        images,
+        retweet,
+        reply,
+        quote,
+        pinned,
+        user: User { screen_name },
+    })
 }
 
 fn parse_protected(element: &ElementRef) -> bool {

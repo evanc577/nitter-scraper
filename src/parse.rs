@@ -154,7 +154,7 @@ fn parse_tweet_images(element: &ElementRef) -> Vec<String> {
     static IMAGES_SELECTOR: Lazy<Selector> =
         Lazy::new(|| Selector::parse(".attachment.image a.still-image").unwrap());
     static IMAGE_ID_RE: Lazy<Regex> =
-        Lazy::new(|| Regex::new(r"^/pic/\w+/media%2F(?P<url>\w+\.\w+)$").unwrap());
+        Lazy::new(|| Regex::new(r"^/pic/\w+/media%2F(?P<url>[\w\-]+\.\w+)$").unwrap());
 
     let images: Vec<_> = element
         .select(&IMAGES_SELECTOR)

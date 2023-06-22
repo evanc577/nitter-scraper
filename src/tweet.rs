@@ -9,6 +9,7 @@ pub struct Tweet {
     pub user: User,
     pub full_text: String,
     pub images: Vec<String>,
+    pub links: Vec<String>,
     pub retweet: bool,
     pub reply: bool,
     pub quote: bool,

@@ -69,7 +69,7 @@ async fn main() -> ExitCode {
             match e.kind() {
                 std::io::ErrorKind::BrokenPipe => break,
                 _ => {
-                    eprintln!("e");
+                    eprintln!("{e}");
                     return ExitCode::FAILURE;
                 }
             }

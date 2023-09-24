@@ -218,9 +218,9 @@ impl<'a> NitterScraper<'a> {
 
                 if response.status() == StatusCode::TOO_MANY_REQUESTS {
                     // Retry if 429
-                    if i < 10 {
+                    if i < 25 {
                         i += 1;
-                        let sleep_s = std::cmp::min(300, 1 << i);
+                        let sleep_s = 1 << std::cmp::min(i, 8);
                         eprintln!(
                             "Received status code {}, sleeping for {} seconds",
                             response.status().as_u16(),

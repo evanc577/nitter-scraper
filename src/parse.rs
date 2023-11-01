@@ -8,7 +8,7 @@ use time::PrimitiveDateTime;
 
 use crate::error::NitterError;
 use crate::nitter_scraper::NitterCursor;
-use crate::tweet::{Tweet, User, Stats};
+use crate::tweet::{Stats, Tweet, User};
 
 pub fn parse_nitter_html(html: String) -> Result<(Vec<Tweet>, NitterCursor), NitterError> {
     static TWEET_SELECTOR: Lazy<Selector> = Lazy::new(|| {
@@ -76,6 +76,7 @@ pub fn parse_nitter_single(html: String) -> Result<(Tweet, NitterCursor), Nitter
 
 fn parse_tweet(element: ElementRef) -> Result<Tweet, NitterError> {
     // Parse individual tweets
+    let full_name = parse_tweet_full_name(element)?;
     let screen_name = parse_tweet_screen_name(element)?;
     let id_str = parse_tweet_id_str(element)?;
     let id = id_str
@@ -108,7 +109,10 @@ fn parse_tweet(element: ElementRef) -> Result<Tweet, NitterError> {
         reply,
         quote,
         pinned,
-        user: User { screen_name },
+        user: User {
+            screen_name,
+            full_name,
+        },
         stats,
     })
 }
@@ -146,9 +150,21 @@ fn parse_not_found(element: ElementRef) -> bool {
         .eq(&Some(true))
 }
 
-static TWEET_LINK_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse(".tweet-date > a").unwrap());
+static TWEET_LINK_SELECTOR: Lazy<Selector> =
+    Lazy::new(|| Selector::parse(".tweet-date > a").unwrap());
 static TWEET_LINK_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"^/(?P<screen_name>\w+)/status/(?P<id>\d+)").unwrap());
+
+fn parse_tweet_full_name(element: ElementRef) -> Result<String, NitterError> {
+    static FULLNAME_SELECTOR: Lazy<Selector> =
+        Lazy::new(|| Selector::parse("a.fullname").unwrap());
+    element
+        .select(&FULLNAME_SELECTOR)
+        .next()
+        .and_then(|fullname_link_element| fullname_link_element.value().attr("title"))
+        .map(|fullname| fullname.to_owned())
+        .ok_or_else(|| NitterError::Parse("missing full_name".into()))
+}
 
 fn parse_tweet_screen_name(element: ElementRef) -> Result<String, NitterError> {
     element
@@ -268,7 +284,6 @@ fn parse_tweet_quote(element: ElementRef) -> bool {
     element.select(&QUOTE_SELECTOR).next().is_some()
 }
 
-
 enum TweetStat {
     Comment,
     Retweet,
@@ -278,10 +293,14 @@ enum TweetStat {
 
 impl TweetStat {
     fn selector(&self) -> &'static Lazy<Selector> {
-        static COMMENT_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse(".icon-comment").unwrap());
-        static RETWEET_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse(".icon-retweet").unwrap());
-        static QUOTE_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse(".icon-quote").unwrap());
-        static HEART_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse(".icon-heart").unwrap());
+        static COMMENT_SELECTOR: Lazy<Selector> =
+            Lazy::new(|| Selector::parse(".icon-comment").unwrap());
+        static RETWEET_SELECTOR: Lazy<Selector> =
+            Lazy::new(|| Selector::parse(".icon-retweet").unwrap());
+        static QUOTE_SELECTOR: Lazy<Selector> =
+            Lazy::new(|| Selector::parse(".icon-quote").unwrap());
+        static HEART_SELECTOR: Lazy<Selector> =
+            Lazy::new(|| Selector::parse(".icon-heart").unwrap());
         match self {
             Self::Comment => &COMMENT_SELECTOR,
             Self::Retweet => &RETWEET_SELECTOR,
@@ -292,10 +311,15 @@ impl TweetStat {
 }
 
 fn parse_tweet_stat(element: ElementRef, stat: TweetStat) -> u64 {
-    static TWEET_STAT_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse(".tweet-stat > .icon-container").unwrap());
+    static TWEET_STAT_SELECTOR: Lazy<Selector> =
+        Lazy::new(|| Selector::parse(".tweet-stat > .icon-container").unwrap());
     for e in element.select(&TWEET_STAT_SELECTOR) {
         if e.select(stat.selector()).next().is_some() {
-            return e.text().next().and_then(|t| t.trim().replace(',', "").parse().ok()).unwrap_or(0);
+            return e
+                .text()
+                .next()
+                .and_then(|t| t.trim().replace(',', "").parse().ok())
+                .unwrap_or(0);
         }
     }
     0

@@ -19,6 +19,7 @@ pub struct Tweet {
 
 #[derive(Debug, Serialize)]
 pub struct User {
+    pub full_name: String,
     pub screen_name: String,
 }
 

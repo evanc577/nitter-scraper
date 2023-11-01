@@ -9,7 +9,7 @@ use reqwest::{Client, StatusCode};
 use typed_builder::TypedBuilder;
 
 use crate::error::NitterError;
-use crate::parse::parse_nitter_html;
+use crate::parse::{parse_nitter_html, parse_nitter_single};
 use crate::tweet::Tweet;
 
 #[derive(TypedBuilder)]
@@ -66,6 +66,7 @@ pub enum NitterQuery {
     UserWithReplies { user: String },
     UserMedia { user: String },
     UserSearch { user: String, query: String },
+    Status { id: u64 },
 }
 
 impl NitterQuery {
@@ -82,6 +83,7 @@ impl NitterQuery {
                 let encoded = utf8_percent_encode(query, NON_ALPHANUMERIC);
                 format!("?f=tweets&q={}", encoded)
             }
+            Self::Status { .. } => "".into(),
         }
     }
 
@@ -92,7 +94,12 @@ impl NitterQuery {
             Self::UserWithReplies { user } => format!("/{}/with_replies", user),
             Self::UserMedia { user } => format!("/{}/media", user),
             Self::UserSearch { user, .. } => format!("/{}/search", user),
+            Self::Status { id } => format!("/i/status/{}", id),
         }
+    }
+
+    fn is_single(&self) -> bool {
+        matches!(self, Self::Status { .. })
     }
 }
 
@@ -251,7 +258,12 @@ impl<'a> NitterScraper<'a> {
             let text = response.text().await.unwrap();
 
             // Parse html and update cursor
-            let (tweets, cursor) = parse_nitter_html(text)?;
+            let (tweets, cursor) = if self.query.is_single() {
+                let (tweet, cursor) = parse_nitter_single(text)?;
+                (vec![tweet], cursor)
+            } else {
+                parse_nitter_html(text)?
+            };
 
             let tweets = if self.reorder_pinned {
                 // Extract pinned tweet

@@ -14,9 +14,18 @@ pub struct Tweet {
     pub reply: bool,
     pub quote: bool,
     pub pinned: bool,
+    pub stats: Stats,
 }
 
 #[derive(Debug, Serialize)]
 pub struct User {
     pub screen_name: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct Stats {
+    pub comment: u64,
+    pub retweet: u64,
+    pub quote: u64,
+    pub heart: u64,
 }

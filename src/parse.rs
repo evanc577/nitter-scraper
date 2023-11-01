@@ -8,7 +8,7 @@ use time::PrimitiveDateTime;
 
 use crate::error::NitterError;
 use crate::nitter_scraper::NitterCursor;
-use crate::tweet::{Tweet, User};
+use crate::tweet::{Tweet, User, Stats};
 
 pub fn parse_nitter_html(html: String) -> Result<(Vec<Tweet>, NitterCursor), NitterError> {
     static TWEET_SELECTOR: Lazy<Selector> = Lazy::new(|| {
@@ -55,6 +55,25 @@ pub fn parse_nitter_html(html: String) -> Result<(Vec<Tweet>, NitterCursor), Nit
     Ok((tweets, cursor))
 }
 
+pub fn parse_nitter_single(html: String) -> Result<(Tweet, NitterCursor), NitterError> {
+    let mut document = Html::parse_document(&html);
+
+    // Remove all quotes
+    static QUOTE_SELECTOR: Lazy<Selector> =
+        Lazy::new(|| Selector::parse(".quote > *:not(.quote-link)").unwrap());
+    let ids: Vec<_> = document
+        .select(&QUOTE_SELECTOR)
+        .map(|p_node| p_node.id())
+        .collect();
+    for id in ids {
+        document.tree.get_mut(id).unwrap().detach();
+    }
+
+    let main_tweet = main_tweet(document.root_element());
+
+    Ok((parse_tweet(main_tweet)?, NitterCursor::End))
+}
+
 fn parse_tweet(element: ElementRef) -> Result<Tweet, NitterError> {
     // Parse individual tweets
     let screen_name = parse_tweet_screen_name(element)?;
@@ -70,6 +89,12 @@ fn parse_tweet(element: ElementRef) -> Result<Tweet, NitterError> {
     let reply = parse_tweet_reply(element);
     let quote = parse_tweet_quote(element);
     let pinned = parse_tweet_pinned(element);
+    let stats = Stats {
+        comment: parse_tweet_stat(element, TweetStat::Comment),
+        retweet: parse_tweet_stat(element, TweetStat::Retweet),
+        quote: parse_tweet_stat(element, TweetStat::Quote),
+        heart: parse_tweet_stat(element, TweetStat::Heart),
+    };
 
     Ok(Tweet {
         id,
@@ -84,7 +109,14 @@ fn parse_tweet(element: ElementRef) -> Result<Tweet, NitterError> {
         quote,
         pinned,
         user: User { screen_name },
+        stats,
     })
+}
+
+fn main_tweet(element: ElementRef) -> ElementRef {
+    static MAIN_TWEET_SELECTOR: Lazy<Selector> =
+        Lazy::new(|| Selector::parse("div.main-tweet > .timeline-item").unwrap());
+    element.select(&MAIN_TWEET_SELECTOR).next().unwrap()
 }
 
 fn parse_protected(element: ElementRef) -> bool {
@@ -114,7 +146,7 @@ fn parse_not_found(element: ElementRef) -> bool {
         .eq(&Some(true))
 }
 
-static TWEET_LINK_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("a.tweet-link").unwrap());
+static TWEET_LINK_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse(".tweet-date > a").unwrap());
 static TWEET_LINK_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"^/(?P<screen_name>\w+)/status/(?P<id>\d+)").unwrap());
 
@@ -234,6 +266,39 @@ fn parse_tweet_quote(element: ElementRef) -> bool {
     static QUOTE_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse(".quote").unwrap());
 
     element.select(&QUOTE_SELECTOR).next().is_some()
+}
+
+
+enum TweetStat {
+    Comment,
+    Retweet,
+    Quote,
+    Heart,
+}
+
+impl TweetStat {
+    fn selector(&self) -> &'static Lazy<Selector> {
+        static COMMENT_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse(".icon-comment").unwrap());
+        static RETWEET_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse(".icon-retweet").unwrap());
+        static QUOTE_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse(".icon-quote").unwrap());
+        static HEART_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse(".icon-heart").unwrap());
+        match self {
+            Self::Comment => &COMMENT_SELECTOR,
+            Self::Retweet => &RETWEET_SELECTOR,
+            Self::Quote => &QUOTE_SELECTOR,
+            Self::Heart => &HEART_SELECTOR,
+        }
+    }
+}
+
+fn parse_tweet_stat(element: ElementRef, stat: TweetStat) -> u64 {
+    static TWEET_STAT_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse(".tweet-stat > .icon-container").unwrap());
+    for e in element.select(&TWEET_STAT_SELECTOR) {
+        if e.select(stat.selector()).next().is_some() {
+            return e.text().next().and_then(|t| t.trim().replace(',', "").parse().ok()).unwrap_or(0);
+        }
+    }
+    0
 }
 
 fn parse_cursor(element: ElementRef) -> NitterCursor {

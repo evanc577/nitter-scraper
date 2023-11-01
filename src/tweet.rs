@@ -9,7 +9,7 @@ pub struct Tweet {
     pub user: User,
     pub full_text: String,
     pub images: Vec<String>,
-    pub video: Option<String>,
+    pub video: Option<Video>,
     pub links: Vec<String>,
     pub retweet: bool,
     pub reply: bool,
@@ -22,6 +22,12 @@ pub struct Tweet {
 pub struct User {
     pub full_name: String,
     pub screen_name: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct Video {
+    pub poster: String,
+    pub url: String,
 }
 
 #[derive(Debug, Serialize)]

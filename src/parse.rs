@@ -8,7 +8,7 @@ use time::PrimitiveDateTime;
 
 use crate::error::NitterError;
 use crate::nitter_scraper::NitterCursor;
-use crate::tweet::{Stats, Tweet, User};
+use crate::tweet::{Stats, Tweet, User, Video};
 
 pub fn parse_nitter_html(html: String) -> Result<(Vec<Tweet>, NitterCursor), NitterError> {
     static TWEET_SELECTOR: Lazy<Selector> = Lazy::new(|| {
@@ -239,15 +239,33 @@ fn parse_tweet_images(element: ElementRef) -> Vec<String> {
     images
 }
 
-fn parse_video(element: ElementRef) -> Option<String> {
-    static VIDEO_SELECTOR: Lazy<Selector> =
+fn parse_video(element: ElementRef) -> Option<Video> {
+    static VIDEO_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("video").unwrap());
+    static VIDEO_SOURCE_SELECTOR: Lazy<Selector> =
         Lazy::new(|| Selector::parse("video > source").unwrap());
 
-    element
-        .select(&VIDEO_SELECTOR)
+    let url = element
+        .select(&VIDEO_SOURCE_SELECTOR)
         .next()
         .and_then(|source_element| source_element.value().attr("src"))
-        .map(|src| src.to_owned())
+        .map(|src| src.to_owned())?;
+    let poster = element
+        .select(&VIDEO_SELECTOR)
+        .next()
+        .and_then(|source_element| source_element.value().attr("poster"))
+        .and_then(|poster| urlencoding::decode(poster).ok())
+        .map(|poster| {
+            let poster = poster.to_string();
+            let poster = if let Some(x) = poster.rsplit_once('?') {
+                x.0
+            } else {
+                poster.as_str()
+            };
+            let poster = poster.trim_start_matches("/pic/");
+            format!("https://pbs.twimg.com/{}", poster)
+        })?;
+
+    Some(Video { poster, url })
 }
 
 fn parse_tweet_time(element: ElementRef) -> Result<(String, i64), NitterError> {

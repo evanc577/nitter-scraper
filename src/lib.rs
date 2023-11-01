@@ -6,4 +6,4 @@ mod tweet;
 
 pub use error::NitterError;
 pub use nitter_scraper::{NitterQuery, NitterScraper};
-pub use tweet::{Tweet, User};
+pub use tweet::*;

@@ -218,7 +218,7 @@ impl<'a> NitterScraper<'a> {
                 let response = self
                     .client
                     .get(&url)
-                    .header(COOKIE, "replaceTwitter=; replaceYouTube=; replaceReddit=")
+                    .header(COOKIE, "proxyVideos=; replaceTwitter=; replaceYouTube=; replaceReddit=")
                     .send()
                     .await
                     .map_err(|e| NitterError::Network(e.to_string()))?;

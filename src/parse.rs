@@ -85,6 +85,7 @@ fn parse_tweet(element: ElementRef) -> Result<Tweet, NitterError> {
     let full_text = parse_tweet_body(element)?;
     let links = parse_links(element)?;
     let images = parse_tweet_images(element);
+    let video = parse_video(element);
     let (created_at, created_at_ts) = parse_tweet_time(element)?;
     let retweet = parse_tweet_retweet(element);
     let reply = parse_tweet_reply(element);
@@ -105,6 +106,7 @@ fn parse_tweet(element: ElementRef) -> Result<Tweet, NitterError> {
         full_text,
         links,
         images,
+        video,
         retweet,
         reply,
         quote,
@@ -156,8 +158,7 @@ static TWEET_LINK_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"^/(?P<screen_name>\w+)/status/(?P<id>\d+)").unwrap());
 
 fn parse_tweet_full_name(element: ElementRef) -> Result<String, NitterError> {
-    static FULLNAME_SELECTOR: Lazy<Selector> =
-        Lazy::new(|| Selector::parse("a.fullname").unwrap());
+    static FULLNAME_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("a.fullname").unwrap());
     element
         .select(&FULLNAME_SELECTOR)
         .next()
@@ -236,6 +237,17 @@ fn parse_tweet_images(element: ElementRef) -> Vec<String> {
         })
         .collect();
     images
+}
+
+fn parse_video(element: ElementRef) -> Option<String> {
+    static VIDEO_SELECTOR: Lazy<Selector> =
+        Lazy::new(|| Selector::parse("video > source").unwrap());
+
+    element
+        .select(&VIDEO_SELECTOR)
+        .next()
+        .and_then(|source_element| source_element.value().attr("src"))
+        .map(|src| src.to_owned())
 }
 
 fn parse_tweet_time(element: ElementRef) -> Result<(String, i64), NitterError> {
